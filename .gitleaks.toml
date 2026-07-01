@@ -1,0 +1,21 @@
+# gitleaks config for this repo. Extends the built-in ruleset and allowlists the
+# obvious example placeholders so `.env.example` doesn't false-positive.
+#
+#   gitleaks git .            # scan committed history
+#   gitleaks protect --staged # scan staged changes (pre-commit)
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Example/placeholder values and non-secret dev defaults"
+paths = [
+  '''\.env\.example$''',
+  '''README\.md$''',
+]
+regexes = [
+  # Well-known local dev defaults, not real secrets.
+  '''\bminioadmin\b''',
+  '''KEYCLOAK_ADMIN_PASSWORD=admin''',
+  '''POSTGRES_PASSWORD=postgres''',
+  '''org_admin_dev_(username|password)''',
+]

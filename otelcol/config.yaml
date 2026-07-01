@@ -1,0 +1,47 @@
+# OpenTelemetry Collector — one OTLP front door, fanned out by signal to the
+# three VictoriaMetrics-family backends. Apps push to otlp 4317/4318.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # VictoriaMetrics' OTLP ingest expects CUMULATIVE counters; many SDKs emit
+  # DELTA. Convert so rate()/increase() work. Harmless if everything is
+  # already cumulative.
+  deltatocumulative: {}
+  batch: {}
+
+exporters:
+  # *_endpoint is the exact ingest URL (otlphttp uses it verbatim).
+  otlphttp/metrics:
+    metrics_endpoint: http://victoria-metrics:8428/opentelemetry/v1/metrics
+    compression: none
+  otlphttp/logs:
+    logs_endpoint: http://victoria-logs:9428/insert/opentelemetry/v1/logs
+    compression: none
+  otlphttp/traces:
+    traces_endpoint: http://victoria-traces:10428/insert/opentelemetry/v1/traces
+    compression: none
+
+service:
+  telemetry:
+    logs:
+      level: warn
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [deltatocumulative, batch]
+      exporters: [otlphttp/metrics]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/logs]
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/traces]

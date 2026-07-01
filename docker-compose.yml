@@ -1,0 +1,254 @@
+# Matrix "Prospector" Studio — local dev stack.
+#
+# Real Studio (+ Alpaca + Construct) running against Postgres, Keycloak,
+# rustfs (S3) and a VictoriaMetrics/Logs/Traces telemetry pipeline.
+#
+# Exposed through Caddy (add both names to /etc/hosts -> 127.0.0.1):
+#   http://auth.strike48.local:8888     -> Keycloak (realm non-prod)
+#   http://studio.strike48.local:8888   -> Matrix Studio (log in: admin/admin)
+#
+# Login is browser -> Studio /auth/login -> redirect to auth.strike48.local
+# -> Keycloak -> back to Studio. Studio's backend talks to keycloak:8080
+# internally and rewrites the host to auth.strike48.local for the browser.
+
+name: studio-stack
+
+networks:
+  default:
+    name: studio-stack
+
+volumes:
+  postgres-data:
+  rustfs-data:
+  vm-data:
+  vl-data:
+  vt-data:
+
+x-svc: &svc
+  restart: unless-stopped
+
+services:
+  # ── Caddy — front door (only auth + studio are exposed) ─────────────────
+  caddy:
+    <<: *svc
+    image: ${CADDY_IMAGE}
+    environment:
+      DOMAIN: ${DOMAIN}
+      CADDY_HTTP_PORT: ${CADDY_HTTP_PORT}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/tls:/tls:ro
+    ports:
+      - "${CADDY_HTTP_PORT}:${CADDY_HTTP_PORT}"
+
+  # ── Postgres (pgvector) — Keycloak + Studio (elixir/rag) databases ──────
+  postgres:
+    <<: *svc
+    image: ${POSTGRES_IMAGE}
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ── Keycloak — OIDC provider, imports the non-prod realm ────────────────
+  # NOTE: hostname is NOT pinned. Studio's backend reaches Keycloak at
+  # keycloak:8080 (issuer http://keycloak:8080/realms/non-prod) and rewrites
+  # the host to auth.strike48.local only for the browser redirect.
+  keycloak:
+    <<: *svc
+    image: ${KEYCLOAK_IMAGE}
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KC_HEALTH_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+    volumes:
+      - ./keycloak/realms:/opt/keycloak/data/import:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  # ── Matrix Studio (the app) ─────────────────────────────────────────────
+  studio:
+    <<: *svc
+    image: ${STUDIO_IMAGE}
+    environment:
+      PHX_SERVER: "true"
+      PORT: "4000"
+      PHX_HOST: studio.${DOMAIN}
+      # Elixir release node name host — without it RELEASE_NODE is `studio@`
+      # and Erlang distribution fails to start (nodistribution crash).
+      POD_IP: 127.0.0.1
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      MATRIX_ORG_AUDIT_HMAC_KEY: ${MATRIX_ORG_AUDIT_HMAC_KEY}
+      DATABASE_URL: postgresql://elixir_user:elixir_password@postgres:5432/elixir
+      RAG_DATABASE_URL: postgresql://rag:password@postgres:5432/rag
+      DATABASE_SSL: "false"
+      # OIDC: backend uses the INTERNAL url; browser is redirected to
+      # auth.<domain> via host rewriting (derived from X-Forwarded-Host).
+      # Both browser and backend use the SAME issuer (https://auth.<domain>:port)
+      # so the token `iss` matches. extra_hosts (below) makes auth.<domain>
+      # resolve to Caddy from inside this container, overriding podman's copy of
+      # the host /etc/hosts (which points it at 127.0.0.1).
+      MATRIX_KEYCLOAK_URL: https://auth.${DOMAIN}:${CADDY_HTTP_PORT}
+      MATRIX_OIDC_IGNORE_SELF_SIGNED: "true"
+      MATRIX_KEYCLOAK_REALM: non-prod
+      MATRIX_KEYCLOAK_CLIENT_ID: studio
+      # Admin console (separate endpoint, listens on 8888) — served at
+      # studio.<domain>/admin via caddy path-routing. Host/port match the edge
+      # so its generated URLs (under /admin) point back through caddy.
+      MATRIX_ADMIN_CONSOLE_HOST: studio.${DOMAIN}
+      MATRIX_ADMIN_CONSOLE_PORT: ${CADDY_HTTP_PORT}
+      # Connector admin auth — required at boot or matrix_connectors crashes
+      # the node. client_secret mode; the secret is only needed for connector
+      # admin ops (not for user login), so a placeholder lets the node boot.
+      MATRIX_CONNECTOR_AUTH_MODE: client_secret
+      MATRIX_KEYCLOAK_ADMIN_CLIENT_SECRET: placeholder-not-used-for-login
+      # Feature backends + telemetry (not required for login).
+      ALPACA_HTTP_ENDPOINT: http://alpaca:3000
+      # Alpaca gRPC address (chat/agents). MUST be set: the image defaults to
+      # localhost:50061 (the matrix_connectors port), which inside Docker points
+      # at the Studio container itself — the gRPC pool then fails health checks
+      # and agent requests 404. Point it at the Alpaca service (gRPC on 50051).
+      ALPACA_ADDRESS: alpaca:50051
+      # Construct (MCP/tool host). Image defaults to https://construct.strike48.test;
+      # point it at the compose service. Studio appends /api/v1.
+      CONSTRUCT_BASE_URL: http://construct:3000
+      MINIO_ENDPOINT: http://rustfs:9000
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      AWS_REGION: ${S3_REGION}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+    # Resolve the public auth host to Caddy (the host gateway, where Caddy is
+    # published) so the backend reaches the same URL the browser uses.
+    extra_hosts:
+      - "auth.${DOMAIN}:host-gateway"
+    # Override the release's runtime.exs so the 0.4.0 Organization admin boots
+    # standalone (see studio-overrides/runtime.exs + README). NOTE: the target
+    # path uses the release's INTERNAL version (0.2.0), not the image tag — if
+    # you bump STUDIO_IMAGE, check `ls /app/releases` and update this path.
+    volumes:
+      - ./studio-overrides/runtime.exs:/app/releases/0.2.0/runtime.exs:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+      keycloak: {condition: service_started}
+
+  # ── Feature flags — turn them all on by default (no admin console) ──────
+  # Studio auto-creates flags (disabled) at boot; this one-shot flips them on
+  # globally once they exist. Adjust the denylist with DISABLED_FLAGS in .env.
+  feature-flags:
+    image: ${POSTGRES_IMAGE}
+    depends_on: [studio]
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: elixir
+      DISABLED_FLAGS: ${DISABLED_FLAGS:-plg_mode,sentry_unmask_data}
+    entrypoint: ["sh", "/enable-flags.sh"]
+    volumes:
+      - ./feature-flags/enable-flags.sh:/enable-flags.sh:ro
+
+  # ── Alpaca — LLM gateway (Studio's chat backend) ────────────────────────
+  alpaca:
+    <<: *svc
+    image: ${ALPACA_IMAGE}
+    environment:
+      ALPACA_CONFIG: /config.toml
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      # Your OpenAI-compatible endpoint's Bearer key. Alpaca's `openai` provider
+      # sends it as `Authorization: Bearer <key>`; the endpoint is set in
+      # alpaca/config.toml (rendered from LLM_BASE_URL). This is THE key the
+      # shipped config uses.
+      OPENAI_API_KEY: ${LLM_API_KEY:-}
+      # Extra providers — only used if you enable their commented model blocks in
+      # alpaca/config.toml. Empty values just disable that provider. Bedrock also
+      # honours AWS_PROFILE / ~/.aws if mounted.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach host services (e.g. Ollama)
+    volumes:
+      - ./alpaca/config.toml:/config.toml:ro
+
+  # ── Construct — MCP host (Studio's tool/agent backend) ──────────────────
+  construct:
+    <<: *svc
+    image: ${CONSTRUCT_IMAGE}
+    environment:
+      HOST_ADDRESS: 0.0.0.0
+      PORT: "3000"
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      AWS_REGION: ${S3_REGION}
+      S3_ENDPOINT: http://rustfs:9000
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    depends_on: [rustfs]
+
+  # ── rustfs — S3-compatible object store (internal) ──────────────────────
+  rustfs:
+    <<: *svc
+    image: ${RUSTFS_IMAGE}
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    volumes:
+      - rustfs-data:/data
+
+  createbuckets:
+    image: ${BUCKET_INIT_IMAGE}
+    depends_on: [rustfs]
+    restart: "no"
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_REGION: ${S3_REGION}
+    volumes:
+      - ./rustfs/create-bucket.sh:/create-bucket.sh:ro
+    entrypoint: ["sh", "-c", "apk add --no-cache curl openssl >/dev/null && sh /create-bucket.sh"]
+
+  # ── Telemetry: OTLP collector -> VictoriaMetrics/Logs/Traces (internal) ─
+  victoria-metrics:
+    <<: *svc
+    image: ${VM_IMAGE}
+    command: ["--httpListenAddr=:8428", "--opentelemetry.usePrometheusNaming=true"]
+    volumes: ["vm-data:/victoria-metrics-data"]
+
+  victoria-logs:
+    <<: *svc
+    image: ${VL_IMAGE}
+    command: ["--httpListenAddr=:9428"]
+    volumes: ["vl-data:/victoria-logs-data"]
+
+  victoria-traces:
+    <<: *svc
+    image: ${VT_IMAGE}
+    command: ["--httpListenAddr=:10428"]
+    volumes: ["vt-data:/victoria-traces-data"]
+
+  otel-collector:
+    <<: *svc
+    image: ${OTELCOL_IMAGE}
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otelcol/config.yaml:/etc/otelcol/config.yaml:ro
+    depends_on: [victoria-metrics, victoria-logs, victoria-traces]

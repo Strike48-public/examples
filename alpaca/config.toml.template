@@ -1,0 +1,186 @@
+# ============================================================================
+# Alpaca endpoint mapping  (TEMPLATE)
+# ============================================================================
+# ./setup.sh renders this into alpaca/config.toml, replacing the @@…@@ tokens
+# with the LLM_* values from .env:
+#   @@LLM_BASE_URL@@      <- LLM_BASE_URL       (your OpenAI-compatible endpoint)
+#   @@LLM_CHAT_MODEL@@    <- LLM_CHAT_MODEL     (chat/completions model id)
+#   @@LLM_EMBED_MODEL@@   <- LLM_EMBED_MODEL    (embeddings model id)
+#   @@LLM_CONTEXT_LIMIT@@ <- LLM_CONTEXT_LIMIT  (the model's real context window)
+# The API key is NOT rendered here — Alpaca's openai provider reads it from
+# OPENAI_API_KEY, which docker-compose feeds from LLM_API_KEY.
+# ============================================================================
+# Alpaca is an LLM gateway. This file maps friendly model names (aliases) to
+# concrete provider endpoints. Studio calls Alpaca by ALIAS (e.g. "default",
+# "embed"), so every alias you reference must resolve to an enabled model whose
+# provider has working credentials.
+#
+# Two things define an endpoint:
+#   1. Provider     — picks the API protocol + default URL + which credentials.
+#   2. base_url     — (optional) overrides the provider's default URL, for
+#                     self-hosted / OpenAI-compatible / gateway endpoints.
+#
+# Credentials are read from ENVIRONMENT VARIABLES (set them in .env — see README):
+#   anthropic → ANTHROPIC_API_KEY        default URL https://api.anthropic.com
+#   openai    → OPENAI_API_KEY           default URL https://api.openai.com
+#   gemini    → GEMINI_API_KEY           default URL https://generativelanguage.googleapis.com
+#   bedrock   → AWS_PROFILE *or* AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY + AWS_REGION
+#   ollama    → (no key)                 default URL http://localhost:11434
+
+[server]
+bind_address = "0.0.0.0"   # reachable as http://alpaca:3000 inside compose
+grpc_port = 50051
+http_port = 3000
+admin_port = 50053
+
+[telemetry]
+enabled = true
+service_name = "alpaca"
+# otlp_endpoint also taken from OTEL_EXPORTER_OTLP_ENDPOINT (set in compose)
+traces = true
+metrics = true
+logs = true
+log_format = "json"
+
+[retry]
+enabled = true
+max_attempts = 3
+base_delay_ms = 200
+max_delay_ms = 30000
+jitter = true
+
+# ─── Aliases ────────────────────────────────────────────────────────────────
+# The names callers actually request. Studio uses at least `default` (chat) and
+# `embed` (embeddings); the rest are tiers Studio may ask for. They all point at
+# your one configured endpoint below — change the target if you add more models.
+# NOTE: the model KEYs below are `openai/<your model id>`. That's deliberate —
+# with direct_passthrough Alpaca sends the key's model id (the part after
+# `openai/`) straight to your endpoint, so it MUST equal the id the server
+# advertises. The aliases therefore also target `openai/<model id>`.
+[aliases]
+default  = "openai/@@LLM_CHAT_MODEL@@"
+smart    = "openai/@@LLM_CHAT_MODEL@@"
+fast     = "openai/@@LLM_CHAT_MODEL@@"
+cheap    = "openai/@@LLM_CHAT_MODEL@@"
+embed    = "openai/@@LLM_EMBED_MODEL@@"
+# Example local alias (needs the ollama endpoint at the bottom of this file):
+# local  = "ollama/llama3.2"
+
+# ─── Your LLM endpoint ────────────────────────────────────────────────────────
+# Everything below is driven by the LLM_* vars in .env (setup.sh substitutes the
+# @@…@@ tokens).
+#
+# base_url is set on the PROVIDER (here), not per-model: Alpaca routes every
+# `openai/*` request to this endpoint. The header_* lines inject
+# `Authorization: Bearer <OPENAI_API_KEY>`, and docker-compose feeds
+# OPENAI_API_KEY from LLM_API_KEY — so an OpenAI-compatible endpoint that
+# requires a key just works. (Point base_url at https://api.openai.com/v1 with a
+# real sk-... key to use OpenAI's cloud instead.)
+[providers.openai.proxy]
+base_url = "@@LLM_BASE_URL@@"
+header_name = "Authorization"
+header_prefix = "Bearer "
+header_command = "printf %s ${OPENAI_API_KEY}"
+refresh_strategy = "always"
+
+# Chat / completions. Keyed by the real model id (see NOTE above).
+[models."openai/@@LLM_CHAT_MODEL@@"]
+name = "Chat model"
+provider = "openai"
+direct_passthrough = true                       # forward the request body as-is
+supports_tools = true
+# context_limit MUST match the model's REAL context window (the server's
+# max_model_len). Studio derives max_completion_tokens ≈ context_limit/4, so a
+# value larger than the server serves gets requests rejected (400 "exceeds
+# maximum context length").
+context_limit = @@LLM_CONTEXT_LIMIT@@
+output_limit = 8192
+enabled = true
+
+# Embeddings (Studio uses these for RAG). Same endpoint + key as chat by default.
+[models."openai/@@LLM_EMBED_MODEL@@"]
+name = "Embedding model"
+provider = "openai"
+direct_passthrough = true
+context_limit = 8192
+output_limit = 0
+enabled = true
+
+# ─── Endpoints / models ─────────────────────────────────────────────────────
+# Each entry maps a model id to a provider endpoint. Add `base_url` to send a
+# provider's traffic to a different host. Set enabled=false to hide a model.
+#
+# The blocks below are COMMENTED-OUT EXAMPLES for other providers. Studio maps
+# its model tiers (SMART/FAST/…) onto whatever models Alpaca exposes, so leaving
+# an enabled cloud model here can silently steal traffic from your endpoint
+# above (and fail auth). Uncomment one only if you've set its API key in .env
+# and actually want it.
+
+# --- OpenAI cloud (default endpoint: https://api.openai.com) ---
+# [models."openai/gpt-4o-mini"]
+# name = "GPT-4o Mini"
+# provider = "openai"
+# supports_tools = true
+# context_limit = 128000
+# output_limit = 16384
+# enabled = true
+
+# [models."openai/text-embedding-3-small"]
+# name = "Text Embedding 3 Small"
+# provider = "openai"
+# context_limit = 8191
+# output_limit = 0
+# enabled = true
+
+# --- Anthropic (default endpoint: https://api.anthropic.com) ---
+# [models."anthropic/claude-3-5-sonnet-20241022"]
+# name = "Claude 3.5 Sonnet"
+# provider = "anthropic"
+# supports_tools = true
+# context_limit = 200000
+# output_limit = 8192
+# enabled = true
+
+# --- Google Gemini (default endpoint: generativelanguage.googleapis.com) ---
+# [models."gemini/gemini-2.5-flash"]
+# name = "Gemini 2.5 Flash"
+# provider = "google"
+# supports_tools = true
+# context_limit = 1048576
+# output_limit = 8192
+# enabled = true
+
+# --- AWS Bedrock (uses the AWS SDK; no base_url, region via AWS_REGION) ---
+# [models."bedrock/amazon.titan-embed-text-v2:0"]
+# name = "Amazon Titan Embeddings V2"
+# provider = "bedrock"
+# context_limit = 8192
+# output_limit = 0
+# enabled = true
+
+# ─── Specifying a CUSTOM endpoint ───────────────────────────────────────────
+# Point a provider's traffic at your own host with `base_url`.
+
+# (a) Self-hosted OpenAI-compatible server (vLLM, LM Studio, LiteLLM, an
+#     internal gateway, …). direct_passthrough forwards the request body as-is.
+# [models."openai/my-llama-3-8b"]
+# name = "Llama 3 8B (self-hosted)"
+# provider = "openai"
+# base_url = "http://my-inference-host:8000/v1"
+# direct_passthrough = true
+# upstream_model = "meta-llama/Meta-Llama-3-8B-Instruct"
+# supports_tools = false
+# context_limit = 8192
+# output_limit = 4096
+# enabled = true
+
+# (b) Ollama on the host (base_url honored directly; host.docker.internal
+#     reaches your machine from inside compose).
+# [models."ollama/llama3.2"]
+# name = "Llama 3.2 (local Ollama)"
+# provider = "ollama"
+# base_url = "http://host.docker.internal:11434"
+# supports_tools = true
+# context_limit = 131072
+# output_limit = 4096
+# enabled = true

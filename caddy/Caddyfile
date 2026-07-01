@@ -1,0 +1,49 @@
+# Single front door, HTTPS on 8888 (self-signed *.strike48.local cert).
+#
+#   https://auth.strike48.local:8888     -> Keycloak
+#   https://studio.strike48.local:8888   -> Matrix Studio (/admin -> admin console)
+#
+# HTTPS (not plain http) because Studio's OIDC library only accepts http
+# issuers on localhost. With TLS, both the browser AND Studio's backend use the
+# SAME issuer https://auth.strike48.local:8888, so the token `iss` matches.
+{
+	auto_https off
+}
+
+# Shared upstream transport. keepalive off means every request re-dials (and so
+# re-resolves the service name via Docker DNS) — otherwise Caddy pools a
+# connection to a container IP that changes when the container is recreated,
+# giving intermittent "no such host" / "connection refused" 502s. lb_try_duration
+# rides out the brief window while a container is coming back up.
+(upstream) {
+	lb_try_duration 5s
+	transport http {
+		keepalive off
+		dial_timeout 5s
+	}
+}
+
+https://auth.{$DOMAIN:strike48.local}:{$CADDY_HTTP_PORT:8888} {
+	tls /tls/cert.pem /tls/key.pem
+	reverse_proxy keycloak:8080 {
+		import upstream
+	}
+}
+
+https://studio.{$DOMAIN:strike48.local}:{$CADDY_HTTP_PORT:8888} {
+	tls /tls/cert.pem /tls/key.pem
+
+	handle /admin* {
+		reverse_proxy studio:8888 {
+			import upstream
+			header_up x-matrix-auth-server https://auth.{$DOMAIN:strike48.local}:{$CADDY_HTTP_PORT:8888}
+			header_up x-matrix-auth-realm non-prod
+		}
+	}
+
+	handle {
+		reverse_proxy studio:4000 {
+			import upstream
+		}
+	}
+}

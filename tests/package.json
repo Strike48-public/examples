@@ -1,0 +1,14 @@
+{
+  "name": "studio-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright E2E: log in, create a persona, hold a conversation in Matrix Studio.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "install-browser": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}
