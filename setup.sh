@@ -56,10 +56,32 @@ fi
 
 # 4. Studio runtime.exs override — extract the release runtime.exs from the
 #    image and append studio-overrides/append.exs (see that file for why).
-if [[ ! -f studio-overrides/runtime.exs ]]; then
-  docker run --rm --entrypoint sh "${STUDIO_IMAGE}" -c 'cat /app/releases/*/runtime.exs' > studio-overrides/runtime.exs
-  cat studio-overrides/append.exs >> studio-overrides/runtime.exs
-  echo "setup: generated studio-overrides/runtime.exs"
+#    Guard on -s (non-empty), not -f: if a previous run failed mid-extraction
+#    (e.g. the image wasn't pulled yet) the shell's `>` redirect still leaves a
+#    0-byte file behind, and -f would treat that as "already done". Compose then
+#    mounts the empty file over the release runtime.exs and Studio boots with no
+#    runtime config — Postgrex fails with "missing the :database key". Extract to
+#    a temp file and only move it into place once verified non-empty, so a failed
+#    docker run never leaves a broken override.
+if [[ ! -s studio-overrides/runtime.exs ]]; then
+  # The extraction reads the file out of the image; on a fresh host an un-pulled
+  # image makes `docker run` emit nothing, so ensure it's present first.
+  docker image inspect "${STUDIO_IMAGE}" >/dev/null 2>&1 || docker pull "${STUDIO_IMAGE}"
+
+  tmp="$(mktemp studio-overrides/runtime.exs.XXXXXX)"
+  trap 'rm -f "$tmp"' EXIT
+  docker run --rm --entrypoint sh "${STUDIO_IMAGE}" -c 'cat /app/releases/*/runtime.exs' > "$tmp"
+  cat studio-overrides/append.exs >> "$tmp"
+
+  if [[ ! -s "$tmp" ]]; then
+    echo "setup: ERROR — extracted an empty runtime.exs from ${STUDIO_IMAGE}." \
+         "Check the image pulled and that /app/releases/*/runtime.exs exists." >&2
+    exit 1
+  fi
+
+  mv "$tmp" studio-overrides/runtime.exs
+  trap - EXIT
+  echo "setup: generated studio-overrides/runtime.exs ($(wc -l < studio-overrides/runtime.exs) lines)"
 fi
 
 # 5. Alpaca config — render the LLM_* values from .env into config.toml.
