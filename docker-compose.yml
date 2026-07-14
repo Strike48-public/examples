@@ -134,12 +134,15 @@ services:
     # published) so the backend reaches the same URL the browser uses.
     extra_hosts:
       - "auth.${DOMAIN}:host-gateway"
-    # Override the release's runtime.exs so the 0.4.0 Organization admin boots
+    # Override the release's runtime.exs so the Organization admin boots
     # standalone (see studio-overrides/runtime.exs + README). NOTE: the target
-    # path uses the release's INTERNAL version (0.2.0), not the image tag — if
-    # you bump STUDIO_IMAGE, check `ls /app/releases` and update this path.
+    # path uses the release's INTERNAL version (0.6.0), not the image tag — if
+    # you bump STUDIO_IMAGE, check the release dir with
+    #   docker run --rm --entrypoint sh $STUDIO_IMAGE -c 'echo /app/releases/*/'
+    # and update this path (a mismatch silently no-ops the override → boot crash
+    # "auth_mode=client_secret but no client_secret provided").
     volumes:
-      - ./studio-overrides/runtime.exs:/app/releases/0.2.0/runtime.exs:ro
+      - ./studio-overrides/runtime.exs:/app/releases/0.6.0/runtime.exs:ro
     depends_on:
       postgres: {condition: service_healthy}
       keycloak: {condition: service_started}
