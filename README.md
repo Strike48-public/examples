@@ -40,8 +40,10 @@ docker login zot.delivery.strike48.io -u <your-email>
 
 This writes `.env` (from `.env.example`, with freshly generated secrets), the
 self-signed certs, the stripped Keycloak realm, the studio `runtime.exs`
-override, and renders `alpaca/config.toml`. Point `MATRIX_REALMS_DIR` at your
-matrix checkout's `nix/realms` if it isn't at the default relative path.
+override, and renders `alpaca/config.toml`. If no matrix checkout is found,
+setup falls back to the bundled `keycloak/default-realm.json` so it works
+standalone. Point `MATRIX_REALMS_DIR` at your matrix checkout's `nix/realms` to
+pick up the latest realm instead of the bundled default.
 
 **4. Point it at your LLM.** The stack needs one OpenAI-compatible endpoint for
 chat + embeddings. Edit the `LLM_*` block in `.env`:

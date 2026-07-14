@@ -1,0 +1,555 @@
+{
+  "realm": "non-prod",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "clients": [
+    {
+      "clientId": "admin:local",
+      "name": "Matrix Admin Client",
+      "description": "Admin client for Matrix server to manage connector clients",
+      "enabled": true,
+      "clientAuthenticatorType": "federated-jwt",
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "attributes": {
+        "access.token.lifespan": "300",
+        "jwt.credential.issuer": "kubernetes",
+        "jwt.credential.sub": "system:serviceaccount:default:local-dev-studio-app",
+        "jwt.credential.audience": "https://auth.strike48.test/realms/non-prod"
+      }
+    },
+    {
+      "clientId": "admin-console",
+      "name": "Matrix Admin Console",
+      "description": "Web client for admin console user authentication (PKCE public client)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "rootUrl": "https://studio.strike48.test",
+      "baseUrl": "/admin",
+      "redirectUris": [
+        "http://localhost:4001/*",
+        "http://127.0.0.1:4001/*",
+        "http://*.strike48.test/*",
+        "https://*.strike48.test/*",
+        "http://non-prod.strike48.test/*",
+        "https://non-prod.strike48.test/*",
+        "http://management.strike48.test/*",
+        "https://management.strike48.test/*",
+        "http://starwars.strike48.test/*",
+        "https://starwars.strike48.test/*",
+        "http://lotr.strike48.test/*",
+        "https://lotr.strike48.test/*",
+        "http://startrek.strike48.test/*",
+        "https://startrek.strike48.test/*",
+        "http://plg.strike48.test/*",
+        "https://plg.strike48.test/*"
+      ],
+      "webOrigins": [
+        "http://localhost:4001",
+        "http://127.0.0.1:4001",
+        "http://*.strike48.test",
+        "https://*.strike48.test",
+        "http://non-prod.strike48.test",
+        "https://non-prod.strike48.test",
+        "http://management.strike48.test",
+        "https://management.strike48.test",
+        "http://starwars.strike48.test",
+        "https://starwars.strike48.test",
+        "http://lotr.strike48.test",
+        "https://lotr.strike48.test",
+        "http://startrek.strike48.test",
+        "https://startrek.strike48.test",
+        "http://plg.strike48.test",
+        "https://plg.strike48.test"
+      ],
+      "attributes": {
+        "access.token.lifespan": "28800",
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
+    },
+    {
+      "clientId": "studio",
+      "name": "Matrix Studio",
+      "description": "Web client for main Matrix Studio UI (PKCE public client)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "rootUrl": "https://studio.strike48.test",
+      "baseUrl": "/studio",
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
+      "attributes": {
+        "access.token.lifespan": "28800",
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
+    },
+    {
+      "clientId": "management-app",
+      "name": "Management App",
+      "description": "Web client for Matrix Management App (PKCE public client)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "http://localhost:4000/*",
+        "http://localhost:4000/auth/keycloak/callback",
+        "https://management.strike48.test/*",
+        "https://management.strike48.test/auth/keycloak/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:4000",
+        "https://management.strike48.test"
+      ],
+      "attributes": {
+        "access.token.lifespan": "28800",
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
+    },
+    {
+      "clientId": "grafana-oauth",
+      "name": "Grafana Observability Dashboard",
+      "description": "OAuth client for Grafana authentication (confidential)",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "grafana-secret-change-in-prod",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "rootUrl": "https://observe.strike48.test",
+      "baseUrl": "/",
+      "redirectUris": [
+        "http://localhost:3000/login/generic_oauth",
+        "http://observe.strike48.test/login/generic_oauth",
+        "https://observe.strike48.test/login/generic_oauth",
+        "http://*.strike48.test/login/generic_oauth",
+        "https://*.strike48.test/login/generic_oauth",
+        "https://observe-*.strike48.engineering/login/generic_oauth"
+      ],
+      "webOrigins": [
+        "http://localhost:3000",
+        "http://observe.strike48.test",
+        "https://observe.strike48.test",
+        "http://*.strike48.test",
+        "https://*.strike48.test",
+        "https://*.strike48.engineering"
+      ],
+      "attributes": {
+        "access.token.lifespan": "28800",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "backchannel.logout.session.required": "true",
+        "backchannel.logout.revoke.offline.tokens": "false"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "devo_super_admin",
+        "description": "Super admin role for Matrix admin console"
+      },
+      {
+        "name": "admin",
+        "description": "Admin role"
+      },
+      {
+        "name": "plg_user",
+        "description": "PLG user role - designates user as a PLG tenant user"
+      },
+      {
+        "name": "mgmt_super_admin",
+        "description": "Management app - platform super admin"
+      },
+      {
+        "name": "mgmt_admin",
+        "description": "Management app - tenant admin"
+      },
+      {
+        "name": "mgmt_operator",
+        "description": "Management app - operator"
+      },
+      {
+        "name": "mgmt_viewer",
+        "description": "Management app - viewer (read-only)"
+      },
+      {
+        "name": "mgmt_keycloak_custodian",
+        "description": "Management app - Keycloak realm/tenant custodian"
+      }
+    ]
+  },
+  "clientScopes": [
+    {
+      "name": "openid",
+      "description": "OpenID Connect scope",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "profile",
+      "description": "OpenID Connect profile scope",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "User profile"
+      },
+      "protocolMappers": [
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "preferred_username",
+            "user.attribute": "username",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "full name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-full-name-mapper",
+          "consentRequired": false,
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "email",
+      "description": "OpenID Connect email scope",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Email address"
+      },
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "email",
+            "user.attribute": "email",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "email verified",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "email_verified",
+            "user.attribute": "emailVerified",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "connector-scope",
+      "description": "Scope for connector clients - adds tenant_id, connector_type, environment claims",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "environment",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "environment",
+            "claim.value": "local",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "plg-claim",
+      "description": "Maps is_plg user attribute to JWT claim for PLG users",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "is_plg",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "is_plg",
+            "user.attribute": "is_plg",
+            "jsonType.label": "boolean",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "plg-identity",
+      "description": "PLG identity provider claim for local development",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "identity_provider",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "identity_provider",
+            "claim.value": "plg-local",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "roles",
+      "description": "OpenID Connect scope for add user roles to the access token",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "client roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "resource_access.${client_id}.roles",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    }
+  ],
+  "defaultDefaultClientScopes": [
+    "roles"
+  ],
+  "users": [
+    {
+      "username": "service-account-admin:local",
+      "enabled": true,
+      "serviceAccountClientId": "admin:local",
+      "clientRoles": {
+        "realm-management": [
+          "manage-clients",
+          "view-clients",
+          "manage-users",
+          "view-users"
+        ]
+      }
+    },
+    {
+      "username": "admin",
+      "email": "admin@local.dev",
+      "firstName": "Admin",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "devo_super_admin",
+        "admin"
+      ]
+    },
+    {
+      "username": "user",
+      "email": "user@local.dev",
+      "firstName": "Test",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "matrix123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin"
+      ]
+    },
+    {
+      "username": "superman",
+      "email": "superman@local.dev",
+      "firstName": "Clark",
+      "lastName": "Kent",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "matrix123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin"
+      ]
+    },
+    {
+      "username": "spiderman",
+      "email": "spiderman@local.dev",
+      "firstName": "Peter",
+      "lastName": "Parker",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "matrix123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin"
+      ]
+    },
+    {
+      "username": "wonderwoman",
+      "email": "wonderwoman@local.dev",
+      "firstName": "Diana",
+      "lastName": "Prince",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "matrix123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin"
+      ]
+    }
+  ]
+}

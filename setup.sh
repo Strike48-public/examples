@@ -36,13 +36,22 @@ fi
 chmod 644 caddy/tls/key.pem keycloak/tls/key.pem
 
 # 3. Keycloak realm — strip the stock-incompatible `kubernetes` IDP from the
-#    Strike48 non-prod realm export. Point MATRIX_REALMS_DIR at your checkout.
+#    Strike48 non-prod realm export. If a checkout is present, point
+#    MATRIX_REALMS_DIR at it to pick up the latest; otherwise fall back to the
+#    bundled keycloak/default-realm.json (already IDP-stripped, committed).
 mkdir -p keycloak/realms
 if [[ ! -f keycloak/realms/non-prod-realm.json ]]; then
   src="${MATRIX_REALMS_DIR:-../../init-dev-converged/nix/realms}/non-prod-realm.json"
-  [[ -f "$src" ]] || { echo "setup: realm source not found: $src (set MATRIX_REALMS_DIR)" >&2; exit 1; }
-  jq 'del(.identityProviders, .identityProviderMappers)' "$src" > keycloak/realms/non-prod-realm.json
-  echo "setup: generated keycloak/realms/non-prod-realm.json"
+  if [[ -f "$src" ]]; then
+    jq 'del(.identityProviders, .identityProviderMappers)' "$src" > keycloak/realms/non-prod-realm.json
+    echo "setup: generated keycloak/realms/non-prod-realm.json from $src"
+  elif [[ -f keycloak/default-realm.json ]]; then
+    cp keycloak/default-realm.json keycloak/realms/non-prod-realm.json
+    echo "setup: used bundled keycloak/default-realm.json (set MATRIX_REALMS_DIR to override)"
+  else
+    echo "setup: realm source not found: $src (set MATRIX_REALMS_DIR)" >&2
+    exit 1
+  fi
 fi
 
 # 4. Studio runtime.exs override — extract the release runtime.exs from the
